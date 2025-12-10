@@ -1,0 +1,201 @@
+---
+title: "Dashboard Socioeconómico de Hogares"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: flatly
+    social: menu
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(readxl)
+library(scales)
+
+# Leer datos
+hogares <- readxl::read_excel("usu_hogar_T225.xlsx")
+
+# Crear variables derivadas
+hogares <- hogares %>%
+  mutate(
+    # Tamaño del hogar categorizado
+    tam_hogar_grupo = case_when(
+      IX_TOT == 1 ~ "1 persona",
+      IX_TOT == 2 ~ "2 personas",
+      IX_TOT %in% 3:4 ~ "3-4 personas",
+      IX_TOT >= 5 ~ "5 o más",
+      TRUE ~ NA_character_
+    ),
+    
+    # Hacinamiento (evitar división por cero)
+    hacinamiento = IX_TOT / pmax(II2, 1),
+    
+    # Variables de servicios básicos
+    agua_dentro = IV6 == 1,
+    agua_red = IV7 == 1,
+    cloaca = IV11 == 1,
+    
+    # Hogar con niños menores de 10 años
+    tiene_menores = IX_MEN10 > 0
+  )
+
+# Definir tema personalizado
+theme_barby <- function() {
+  theme_minimal() +
+    theme(
+      text = element_text(family = "sans", color = "#2c3e50"),
+      plot.title = element_text(color = "#2c3e50", face = "bold", size = 10),
+      axis.title = element_text(color = "#2c3e50"),
+      axis.text = element_text(color = "#7f8c8d"),
+      panel.grid.major = element_line(color = "#ecf0f1"),
+      panel.grid.minor = element_blank(),
+      legend.position = "none"
+    )
+}
+
+# Definir colores
+color_principal <- "#2c3e50"  # Azul oscuro
+color_acento <- "#f39c12"     # Dorado
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### PERFIL DEMOGRÁFICO DEL HOGAR
+
+```{r}
+# Calcular KPIs principales
+kpis_demograficos <- hogares %>%
+  summarise(
+    Total_hogares = sum(PONDERA, na.rm = TRUE),
+    Tamaño_promedio = weighted.mean(IX_TOT, PONDERA, na.rm = TRUE),
+    Porc_con_menores = weighted.mean(tiene_menores, PONDERA, na.rm = TRUE) * 100,
+    Porc_hacinamiento_critico = weighted.mean(hacinamiento > 3, PONDERA, na.rm = TRUE) * 100
+  ) %>%
+  mutate(across(where(is.numeric), round, 1))
+
+# Mostrar tabla
+kpis_demograficos %>%
+  pivot_longer(everything(), names_to = "Indicador", values_to = "Valor") %>%
+  mutate(Indicador = recode(Indicador,
+    "Total_hogares" = "Total de hogares (ponderados)",
+    "Tamaño_promedio" = "Tamaño medio del hogar",
+    "Porc_con_menores" = "% con menores de 10 años",
+    "Porc_hacinamiento_critico" = "% hacinamiento crítico"
+  )) %>%
+  knitr::kable(align = "lr", col.names = c("Indicador", "Valor"))
+# Gráfico de distribución por tamaño de hogar
+hogares %>%
+  filter(!is.na(tam_hogar_grupo)) %>%
+  group_by(tam_hogar_grupo) %>%
+  summarise(porcentaje = sum(PONDERA, na.rm = TRUE) / sum(hogares$PONDERA, na.rm = TRUE) * 100) %>%
+  mutate(tam_hogar_grupo = factor(tam_hogar_grupo, 
+                                  levels = c("1 persona", "2 personas", "3-4 personas", "5 o más"))) %>%
+  ggplot(aes(x = porcentaje, y = fct_rev(tam_hogar_grupo))) +
+  geom_col(fill = color_principal) +
+  geom_text(aes(label = paste0(round(porcentaje, 1), "%")), 
+            hjust = -0.1, size = 2.8, color = color_principal) +
+  scale_x_continuous(limits = c(0, 40), labels = label_percent(scale = 1)) +
+  labs(
+    title = "Distribución del tamaño del hogar",
+    x = "% de hogares",
+    y = NULL
+  ) +
+  theme_barby()
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### CONDICIONES DE LA VIVIENDA
+```{r}
+# Calcular porcentajes de servicios básicos
+servicios <- hogares %>%
+  summarise(
+    Agua_dentro = weighted.mean(agua_dentro, PONDERA, na.rm = TRUE) * 100,
+    Agua_red = weighted.mean(agua_red, PONDERA, na.rm = TRUE) * 100,
+    Cloaca = weighted.mean(cloaca, PONDERA, na.rm = TRUE) * 100
+  ) %>%
+  pivot_longer(everything(), names_to = "Servicio", values_to = "Porcentaje") %>%
+  mutate(Servicio = recode(Servicio,
+    "Agua_dentro" = "Agua dentro de la vivienda",
+    "Agua_red" = "Agua de red pública",
+    "Cloaca" = "Conexión a cloaca"
+  ))
+
+# Mostrar tabla
+servicios %>%
+  mutate(Porcentaje = round(Porcentaje, 1)) %>%
+  knitr::kable(align = "lr", col.names = c("Servicio", "% de hogares"))
+# Gráfico de servicios básicos
+servicios %>%
+  ggplot(aes(x = Porcentaje, y = fct_reorder(Servicio, Porcentaje))) +
+  geom_col(fill = color_principal) +
+  geom_text(aes(label = paste0(round(Porcentaje, 1), "%")), 
+            hjust = -0.1, size = 3.5, color = color_principal) +
+  scale_x_continuous(limits = c(0, 100), labels = label_percent(scale = 1)) +
+  labs(
+    title = "Acceso a servicios básicos",
+    x = "% de hogares",
+    y = NULL
+  ) +
+  theme_barby()
+# Hacinamiento crítico por región
+hacinamiento_region <- hogares %>%
+  group_by(REGION) %>%
+  summarise(
+    porcentaje = weighted.mean(hacinamiento > 3, PONDERA, na.rm = TRUE) * 100
+  ) %>%
+  arrange(porcentaje)
+
+# Gráfico de hacinamiento por región
+hacinamiento_region %>%
+  ggplot(aes(x = porcentaje, y = fct_reorder(as.character(REGION), porcentaje))) +
+  geom_col(fill = color_acento) +
+  geom_text(aes(label = paste0(round(porcentaje, 1), "%")), 
+            hjust = -0.1, size = 2.8, color = color_principal) +
+  scale_x_continuous(limits = c(0, 30), labels = label_percent(scale = 1)) +
+  labs(
+    title = "Hacinamiento crítico por región",
+    x = "% hogares con hacinamiento > 3",
+    y = "Región"
+  ) +
+  theme_barby()
+```
+
+### INGRESOS Y DESIGUALDAD
+```{r}
+# Calcular IPCF promedio ponderado
+ipcf_promedio <- hogares %>%
+  filter(!is.na(IPCF), !is.na(PONDIH)) %>%
+  summarise(IPCF_promedio = weighted.mean(IPCF, PONDIH, na.rm = TRUE))
+
+# Mostrar valor
+valueBox(
+  value = paste("$", round(ipcf_promedio$IPCF_promedio, 0)),
+  caption = "IPCF promedio ponderado",
+  icon = "fa-usd",
+  color = "primary"
+)
+# IPCF promedio por decil
+ipcf_decil <- hogares %>%
+  filter(!is.na(IPCF), !is.na(PONDIH), !is.na(DECCFR)) %>%
+  group_by(DECCFR) %>%
+  summarise(IPCF_promedio = weighted.mean(IPCF, PONDIH, na.rm = TRUE))
+
+# Gráfico de IPCF por decil
+ipcf_decil %>%
+  ggplot(aes(x = factor(DECCFR), y = IPCF_promedio)) +
+  geom_col(fill = color_principal) +
+  scale_y_continuous(labels = label_number(scale = 1, prefix = "$")) +
+  labs(
+    title = "IPCF promedio por decil de ingresos",
+    x = "Decil de IPCF",
+    y = "IPCF promedio ponderado"
+  ) +
+  theme_barby()
+```
+
