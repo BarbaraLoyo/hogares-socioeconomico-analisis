@@ -15,8 +15,8 @@ Comprender las condiciones socioeconómicas de los hogares, identificar patrones
 - `/visuals`: capturas del dashboard y gráficos clave.
 
 ## 🧩 Herramientas
-- Power BI / Excel
-- Python / R (opcional para análisis)
+- Excel
+- RStudio
 - GitHub para versión y portafolio
 
 ## 📌 Estado
