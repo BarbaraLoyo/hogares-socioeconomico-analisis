@@ -10,7 +10,7 @@ Comprender las condiciones socioeconómicas de los hogares, identificar patrones
 
 ## 📊 Contenido del proyecto
 - `/data`: dataset original y, más adelante, versión limpia.
-- `/dashboard`: archivo del dashboard (Power BI / Excel).
+- `/dashboard`: archivo del dashboard RStudio (HTML)
 - `/report`: informe ejecutivo en PDF.
 - `/visuals`: capturas del dashboard y gráficos clave.
 
@@ -20,4 +20,4 @@ Comprender las condiciones socioeconómicas de los hogares, identificar patrones
 - GitHub para versión y portafolio
 
 ## 📌 Estado
-Proyecto en desarrollo. Se irán agregando análisis, visualizaciones e informe final.
+Proyecto finalizado.
